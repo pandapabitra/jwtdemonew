@@ -17,6 +17,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.ArrayList;
 
+//call this filter only once per request
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -28,30 +29,48 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, FilterChain filterChain) throws ServletException, IOException {
-
+        //get the jwt token from request header
+        //validate that jwt token
         String bearerToken = httpServletRequest.getHeader("Authorization");
-        String userName;
-        String token;
+        String username = null;
+        String token = null;
 
+        //check if token exists or has Bearer text
         if(bearerToken != null && bearerToken.startsWith("Bearer ")){
+
+            //extract jwt token from bearerToken
             token = bearerToken.substring(7);
 
-            userName = jwtUtil.extractUsername(token);
-            if(userName != null){
-                UserDetails userDetails = customUserDetailService.loadUserByUsername(userName);
-                if(jwtUtil.validateToken(token, userDetails) && SecurityContextHolder.getContext().getAuthentication() == null){
-                    UsernamePasswordAuthenticationToken upat = new UsernamePasswordAuthenticationToken(userDetails, null, new ArrayList<>());
-                    upat.setDetails(new WebAuthenticationDetailsSource().buildDetails(httpServletRequest));
-                    SecurityContextHolder.getContext().setAuthentication(upat);
+            try{
+                //extract username from the token
+                username = jwtUtil.extractUsername(token);
+
+                //security checks
+                if(username != null && SecurityContextHolder.getContext().getAuthentication() == null){
+
+                    //get userdetails for this user
+                    UserDetails userDetails = customUserDetailService.loadUserByUsername(username);
+
+                    if(jwtUtil.validateToken(token, userDetails)){
+
+                        UsernamePasswordAuthenticationToken upat = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                        upat.setDetails(new WebAuthenticationDetailsSource().buildDetails(httpServletRequest));
+
+                        SecurityContextHolder.getContext().setAuthentication(upat);
+
+                    }
+                } else {
+                    System.out.println("Invalid Token!!!");
                 }
-            } else {
-                System.out.println("Invalid Token");
+            } catch (Exception ex){
+                ex.printStackTrace();
             }
 
         } else {
-            System.out.println("Invalid Bearer Token Format!");
+            System.out.println("Invalid Bearer Token Format!!");
         }
 
+        //if all is well forward the filter request to the requested endpoint
         filterChain.doFilter(httpServletRequest, httpServletResponse);
     }
 }
